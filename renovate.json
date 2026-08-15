@@ -6,8 +6,8 @@
     ":dependencyDashboard"
   ],
   "labels": ["dependencies"],
-  "assignees": ["schwankner"],
-  "reviewers": ["schwankner"],
+  "assignees": ["mmalyska"],
+  "reviewers": ["mmalyska"],
   "schedule": ["at any time"],
   "prCreation": "not-pending",
   "prHourlyLimit": 3,
