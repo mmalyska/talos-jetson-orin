@@ -18,7 +18,7 @@ CACHE_REGISTRY="${CACHE_REGISTRY:-}"  # set to ghcr.io/<owner>/build-cache in CI
 TALOS_VERSION="${TALOS_VERSION:-v1.13.8}"
 
 # ── siderolabs/pkgs pin (derived from TALOS_VERSION) ─────────────────────────
-PKGS_COMMIT="${PKGS_COMMIT:-f677246a}"   # matches Talos v1.13.8 (PKGS v1.13.0-55-gf677246, kernel 6.18.42)
+PKGS_COMMIT="${PKGS_COMMIT:-f677246a}"  # matches Talos v1.13.8 (PKGS v1.13.0-55-gf677246, kernel 6.18.42)
 PKGS_BRANCH="${PKGS_BRANCH:-release-$(echo "${TALOS_VERSION}" | sed 's/^v//' | cut -d. -f1,2)}"
 
 # ── Kernel version — derived automatically from siderolabs/pkgs ──────────────
