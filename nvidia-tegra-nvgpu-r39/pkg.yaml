@@ -78,6 +78,12 @@ steps:
         export CONFIG_HOST1X_HAVE_SYNCPT_BASE=y
         export CONFIG_DRM_TEGRA_HAVE_DISPLAY=y
 
+        # Modules are built one directory at a time, but some depend on exports of a module
+        # built later (host1x-fence needs the nvhost_* exports of host1x-nvhost). modpost
+        # would fail the first one; warn instead and check every undefined symbol once all
+        # modules exist (end of this script).
+        export KBUILD_MODPOST_WARN=1
+
         # Build one out-of-tree module directory against the Talos kernel and add its
         # exported symbols for the modules that follow (order matters). -Werror is
         # dropped from all Makefiles because Clang warns where GCC does not.
@@ -89,6 +95,11 @@ steps:
           cat $1/Module.symvers >> $SYMS
         }
 
+        # r39 nvgpu, tegra-drm, nvmap and mc-utils reference the hypervisor helpers
+        # (is_tegra_hypervisor_mode, tegra_hv_ivc_*, tegra_hv_mempool_*) that tegra_hv.ko
+        # exports; on bare metal it only has to be loaded. Only that module of the directory
+        # (obj-m on the command line overrides the Makefile).
+        oot $OOT/drivers/virt/tegra obj-m=tegra_hv.o
         oot $OOT/drivers/gpu/host1x
         oot $OOT/drivers/platform/tegra/mc-utils
         oot $OOT/drivers/gpu/host1x-fence
@@ -101,6 +112,19 @@ steps:
         oot $OOT/drivers/devfreq
         # syncpoints through the OE4T host1x (the kernel has neither GRHOST nor HOST1X_NEXT)
         oot /oot-src/nvgpu/drivers/gpu/nvgpu CONFIG_TEGRA_GK20A_NVHOST=y CONFIG_TEGRA_GK20A_NVHOST_HOST1X=y
+
+        # Every undefined symbol of every module must be exported by the kernel (including its
+        # in-tree modules, /src/Module.symvers) or by one of the modules built above.
+        awk -F'\t' '{print $2}' /src/Module.symvers $SYMS | sort -u > /tmp/known-symbols
+        fail=0
+        for ko in $(find /oot-src -name '*.ko' | sort); do
+          llvm-nm -u "$ko" | awk '$1 == "U" {print $2}' | sort -u | comm -23 - /tmp/known-symbols > /tmp/unresolved || true
+          if [ -s /tmp/unresolved ]; then
+            echo "UNRESOLVED symbols in ${ko##*/}:"; sed 's/^/    /' /tmp/unresolved; fail=1
+          fi
+        done
+        [ "$fail" = 0 ] || { echo "ERROR: unresolved module symbols"; exit 1; }
+        echo "all module symbols resolve"
     install:
       - |
         OOT=/oot-src/nvidia-oot
@@ -121,9 +145,9 @@ steps:
 
         # Load order: tegra-drm needs the OE4T host1x stack; nvgpu needs all of it.
         mkdir -p /rootfs/usr/lib/modprobe.d
-        printf 'softdep tegra-drm pre: host1x host1x-fence host1x-nvhost\n' \
+        printf 'softdep tegra-drm pre: tegra_hv host1x host1x-fence host1x-nvhost\n' \
           > /rootfs/usr/lib/modprobe.d/nvidia-tegra.conf
-        printf 'softdep nvgpu pre: host1x nvmap host1x-fence host1x-nvhost tegra-drm mc-utils\n' \
+        printf 'softdep nvgpu pre: tegra_hv host1x nvmap host1x-fence host1x-nvhost tegra-drm mc-utils\n' \
           >> /rootfs/usr/lib/modprobe.d/nvidia-tegra.conf
 
         # build-extensions.sh takes the kernel image and signing cert from here to
