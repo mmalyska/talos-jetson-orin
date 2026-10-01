@@ -75,7 +75,10 @@ Workflow `.github/workflows/validate-r39-build.yaml` ("Validate r39 build"): clo
 
 Triggers: a push to `feat/jetpack7-r39` that touches `nvidia-tegra-nvgpu-r39/**` or the workflow file (a newer push cancels a running build), and `workflow_dispatch` once the file is on the default branch (GitHub does not offer dispatch for workflows that only exist on another branch).
 
-First run: https://github.com/mmalyska/talos-jetson-orin/actions/runs/36856422399. A compile failure there is expected and is the starting point for A4/A5 iteration.
+### Run log
+
+1. [Run 36856422399](https://github.com/mmalyska/talos-jetson-orin/actions/runs/36856422399): failed after 1h24m. Setup, key restore and the pkgs clone passed; the release kernel cache tag (`kernel-v1.14.0-k6.18.48`) does not exist in ghcr, so the kernel stage built cold (79 min, stage #54); the tarball checksums, conftest step and patch loop passed. First real compile error: `host1x/dev.c` (`.reserve_vblank_syncpts` not a field of `struct host1x_info`). Cause: the field exists only under `CONFIG_DRM_TEGRA_HAVE_DISPLAY`, which `nvidia-oot/drivers/gpu/Makefile` defines (together with `CONFIG_HOST1X_HAVE_SYNCPT_BASE`) when any Tegra 2x..194 SoC option is enabled; the package builds module directories individually and never reads that Makefile. Talos enables the 132/210/186/194/234 options, so NVIDIA's own build would define both. Fix: both added to `KCFLAGS` in the package. Also added a separate kernel-stage step that exports all layers to `kernel-r39-validate-*`, because BuildKit does not export cache from a failed build.
+2. [Run 36865915462](https://github.com/mmalyska/talos-jetson-orin/actions/runs/36865915462): in progress at the time of writing (kernel stage cold again, then the module build).
 
 ## Next
 
