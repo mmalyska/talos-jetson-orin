@@ -69,6 +69,14 @@ Archive URLs resolve (HTTP 200), pattern `https://gitlab.com/nvidia/nv-tegra/<re
 
 On the last one: r36's problem was that `host1x_syncpt_alloc()` returned NULL early and handed out syncpoint id 0, which GA10B rejects (`NVGPU_ERRATA_SYNCPT_INVALID_ID_0`). In r39, `nvgpu_nvhost_get_syncpt_client_managed()` already allocates with `HOST1X_SYNCPT_CLIENT_MANAGED | HOST1X_SYNCPT_GPU`, the DTB gained a syncpoint-shim node, and the r39 `host1x` parses it. The failure may be gone; the GA10B errata flag and its checks in `channel_user_syncpt.c` and `channel_sync_syncpt.c` are still present, so a hardware run decides. Plan: port the patch only if the first CUDA smoke test (error 999 on the first `cudaStreamSynchronize()`) shows the same failure.
 
+## A5: CI validation run (set up 2026-10-01)
+
+Workflow `.github/workflows/validate-r39-build.yaml` ("Validate r39 build"): clones `siderolabs/pkgs` at the commit pinned for the current Talos version, injects `nvidia-tegra-nvgpu-r39/`, wires the signing keys from the repository secrets `SIGNING_KEY_PEM`/`SIGNING_KEY_X509` the same way the release build does, builds `--target nvidia-tegra-nvgpu-r39` on the arm64 runner, then verifies the output (all eight expected modules, the `host1x` and `tegra-drm` shadow paths, a signature and the right vermagic on every `.ko`, `modprobe.d/nvidia-tegra.conf`). It writes the first compiler errors to the job summary and uploads the full log and the `.ko` files as the `nvgpu-r39-build` artifact even on failure. It only reads the kernel layers from the shared BuildKit cache and writes its own `nvgpu-r39-validate-k<kernel>` tag.
+
+Triggers: a push to `feat/jetpack7-r39` that touches `nvidia-tegra-nvgpu-r39/**` or the workflow file (a newer push cancels a running build), and `workflow_dispatch` once the file is on the default branch (GitHub does not offer dispatch for workflows that only exist on another branch).
+
+First run: https://github.com/mmalyska/talos-jetson-orin/actions/runs/36856422399. A compile failure there is expected and is the starting point for A4/A5 iteration.
+
 ## Next
 
 Task A4/A5: rebase the patches and get the module set compiling against Linux 6.18.48 (build in CI or locally with the Talos kernel-build stage).
