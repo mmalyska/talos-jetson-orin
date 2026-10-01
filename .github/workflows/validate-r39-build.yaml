@@ -19,10 +19,24 @@ name: Validate r39 build
 # layers are read from the same registry cache the release build writes; this workflow
 # never writes to it).
 # Needs the repository secrets SIGNING_KEY_PEM and SIGNING_KEY_X509 (same as Build Extensions).
-# Trigger: workflow_dispatch only.
+# Triggers:
+#   - push to feat/jetpack7-r39 that touches nvidia-tegra-nvgpu-r39/ or this file, so each
+#     patch or pin change is built (GitHub only offers workflow_dispatch for workflows that
+#     exist on the default branch, which this one does not yet)
+#   - workflow_dispatch, usable once this file is on the default branch
+# A newer push cancels a build still running for the same ref.
 
 on:
+  push:
+    branches: [feat/jetpack7-r39]
+    paths:
+      - nvidia-tegra-nvgpu-r39/**
+      - .github/workflows/validate-r39-build.yaml
   workflow_dispatch:
+
+concurrency:
+  group: validate-r39-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
