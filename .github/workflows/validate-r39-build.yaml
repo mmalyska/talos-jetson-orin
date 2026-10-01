@@ -15,9 +15,9 @@ name: Validate r39 build
 # the first compiler errors are written to the job summary, so a failed run is a usable
 # iteration step.
 #
-# Runtime: about 90 min with a cold kernel cache, about 20 min with a warm one (the kernel
-# layers are read from the same registry cache the release build writes; this workflow
-# never writes to it).
+# Runtime: about 80 min for the kernel stage on the first run, then a few minutes per run
+# (the kernel layers are cached under a dedicated kernel-r39-validate-* tag in
+# ghcr.io/<owner>/build-cache; this workflow never writes the release build's cache tags).
 # Needs the repository secrets SIGNING_KEY_PEM and SIGNING_KEY_X509 (same as Build Extensions).
 # Triggers:
 #   - push to feat/jetpack7-r39 that touches nvidia-tegra-nvgpu-r39/ or this file, so each
@@ -111,6 +111,29 @@ jobs:
             /tmp/talos-pkgs/kernel/build/config-arm64
           grep "CONFIG_MODULE_SIG_KEY" /tmp/talos-pkgs/kernel/build/config-arm64
 
+      - name: Warm the kernel build cache
+        # BuildKit exports cache only from a successful build, so a failing module build would
+        # throw away the kernel compile (about 80 min cold) on every iteration. Build the
+        # kernel stage on its own first and export all of its layers under a dedicated tag.
+        run: |
+          source scripts/common.sh
+          cd /tmp/talos-pkgs
+
+          CACHE_REGISTRY="ghcr.io/${{ github.repository_owner }}/build-cache"
+          CACHE_TAG_KERNEL_R39="kernel-r39-validate-${TALOS_VERSION}-k${KERNEL_VERSION}"
+
+          docker buildx build \
+            --builder talos-builder \
+            --file Pkgfile \
+            --target kernel-build \
+            --platform linux/arm64 \
+            --progress=plain \
+            --cache-from "type=registry,ref=${CACHE_REGISTRY}:${CACHE_TAG_KERNEL_R39}" \
+            --cache-to   "type=registry,ref=${CACHE_REGISTRY}:${CACHE_TAG_KERNEL_R39},mode=max" \
+            --output "type=cacheonly" \
+            . 2>&1 | tee /tmp/nvgpu-r39-kernel.log
+        timeout-minutes: 150
+
       - name: Build nvidia-tegra-nvgpu-r39
         run: |
           source scripts/common.sh
@@ -120,7 +143,7 @@ jobs:
           mkdir -p "${OUT}"
 
           CACHE_REGISTRY="ghcr.io/${{ github.repository_owner }}/build-cache"
-          CACHE_TAG_KERNEL="kernel-${TALOS_VERSION}-k${KERNEL_VERSION}"
+          CACHE_TAG_KERNEL="kernel-r39-validate-${TALOS_VERSION}-k${KERNEL_VERSION}"
           CACHE_TAG_R39="nvgpu-r39-validate-k${KERNEL_VERSION}"
 
           # bldr addresses targets by the `name:` in pkg.yaml
@@ -151,7 +174,7 @@ jobs:
             echo "## r39 build: first errors"
             echo
             echo '```'
-            grep -nE "error:|fatal error|No rule to make target|undefined!|patch: \*\*\*|FAILED|Hunk #[0-9]+ FAILED|ERROR:" "${LOG}" | head -80 || true
+            grep -nE "error:|fatal error|No rule to make target|undefined!|patch: \*\*\*|FAILED|Hunk #[0-9]+ FAILED|ERROR:" "${LOG}" | grep -v "cache importer" | head -80 || true
             echo '```'
             echo
             echo "- modpost undefined symbols: $(grep -c 'undefined!' "${LOG}" || true)"
@@ -201,6 +224,7 @@ jobs:
           name: nvgpu-r39-build
           path: |
             /tmp/nvgpu-r39-build.log
+            /tmp/nvgpu-r39-kernel.log
             /tmp/nvgpu-r39-out/**/*.ko
           if-no-files-found: warn
           retention-days: 14

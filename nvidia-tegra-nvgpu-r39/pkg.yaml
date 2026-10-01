@@ -32,10 +32,16 @@ steps:
       CC: clang
       # The OE4T top-level Makefiles add these include paths for every module; the
       # module directories are built individually here, so pass them globally.
+      # The same goes for the two defines nvidia-oot/drivers/gpu/Makefile exports when any
+      # of the Tegra 2x..194 SoC options is on (Talos enables 132/210/186/194/234). Without
+      # CONFIG_DRM_TEGRA_HAVE_DISPLAY, struct host1x_info has no reserve_vblank_syncpts
+      # field and host1x/dev.c does not compile (r39 CI run 36856422399).
       KCFLAGS: >-
         -I/oot-src/out/nvidia-conftest
         -I/oot-src/nvidia-oot/include
         -I/oot-src/nvidia-oot/drivers/video/tegra/nvmap/include
+        -DCONFIG_HOST1X_HAVE_SYNCPT_BASE
+        -DCONFIG_DRM_TEGRA_HAVE_DISPLAY
     prepare:
       - |
         for t in nvgpu nvidia-oot hwpm; do
