@@ -13,8 +13,12 @@
 # install paths, and differences between the distro Clang and the Talos LLVM toolchain.
 # The full BuildKit build in the workflow stays the authority.
 #
+# The package's conftest step probes which symbols the kernel exports, so it needs the real
+# Module.symvers of the Talos kernel (only a full kernel build makes one). Pass it in
+# R39_SYMVERS; the workflow's full BuildKit job exports it into the Actions cache.
+#
 # Needs: Ubuntu-like host with sudo, apt, curl, python3. Writes /src, /oot-src, /pkg.
-# Usage: scripts/r39-compile-check.sh [workdir]
+# Usage: R39_SYMVERS=/path/to/Module.symvers scripts/r39-compile-check.sh [workdir]
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,6 +29,9 @@ PKG_YAML="${PKG_DIR}/pkg.yaml"
 WORK="${1:-/tmp/r39-fast}"
 LOG="${WORK}/build.log"
 mkdir -p "${WORK}"
+
+[ -n "${R39_SYMVERS:-}" ] && [ -s "${R39_SYMVERS}" ] \
+  || { echo "R39_SYMVERS must point to the Talos kernel's Module.symvers (see header)" >&2; exit 2; }
 
 echo "=== r39 compile check: Talos ${TALOS_VERSION}, kernel ${KERNEL_VERSION}, pkgs ${PKGS_COMMIT} ==="
 
@@ -64,8 +71,13 @@ KMAKE=(make -C /src ARCH=arm64 LLVM=1 -j"$(nproc)")
 "${KMAKE[@]}" modules_prepare
 test -f /src/include/config/kernel.release
 echo "kernel.release: $(cat /src/include/config/kernel.release)"
-# the Talos tree has no vmlinux here; resolve nothing, warn on unresolved symbols
+cp "${R39_SYMVERS}" /src/Module.symvers
+echo "Module.symvers: $(wc -l < /src/Module.symvers) symbols"
+# modpost only sees the kernel's own exports here, not the other out-of-tree modules' and not
+# the Talos build's vmlinux, so warn instead of failing on unresolved symbols
 export KBUILD_MODPOST_WARN=1
+# the distro Clang is not the Talos LLVM; conftest compares compiler version strings
+export IGNORE_CC_MISMATCH=1
 
 # ── package environment, sources, prepare and build scripts from pkg.yaml ─────
 while IFS= read -r line; do

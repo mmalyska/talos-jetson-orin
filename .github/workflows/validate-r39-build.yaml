@@ -49,6 +49,8 @@ jobs:
     name: Fast compile check (no kernel build)
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 60
+    outputs:
+      symvers_key: ${{ steps.ver.outputs.key }}
 
     permissions:
       contents: read
@@ -57,8 +59,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Derive the Module.symvers cache key
+        id: ver
+        run: |
+          source scripts/common.sh
+          echo "key=r39-symvers-${TALOS_VERSION}-k${KERNEL_VERSION}-pkgs${PKGS_COMMIT}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Talos kernel's Module.symvers
+        id: symvers
+        uses: actions/cache/restore@v4
+        with:
+          path: /tmp/r39-symvers/Module.symvers
+          key: ${{ steps.ver.outputs.key }}
+
       - name: Compile the r39 module set against modules_prepare
+        if: steps.symvers.outputs.cache-hit == 'true'
+        env:
+          R39_SYMVERS: /tmp/r39-symvers/Module.symvers
         run: scripts/r39-compile-check.sh /tmp/r39-fast
+
+      - name: No cached Module.symvers yet
+        if: steps.symvers.outputs.cache-hit != 'true'
+        run: |
+          echo "::notice::No cached Module.symvers for ${{ steps.ver.outputs.key }}. The full job below compiles the kernel and saves it; the fast check works from the next run."
 
       - name: Summarize compiler errors
         if: always()
@@ -87,6 +110,9 @@ jobs:
   validate:
     name: Build nvidia-tegra-nvgpu-r39 (full, BuildKit)
     needs: fast-compile
+    # the fast job also succeeds when it had no cached Module.symvers to work with (it then only
+    # prints a notice), so this job runs exactly when the fast check passed or could not run
+    if: ${{ needs.fast-compile.result == 'success' }}
     runs-on: ubuntu-26.04-arm
 
     permissions:
@@ -184,6 +210,37 @@ jobs:
             --output "type=local,dest=${OUT}" \
             . 2>&1 | tee /tmp/nvgpu-r39-build.log
         timeout-minutes: 180
+
+      - name: Export Module.symvers of the kernel build
+        id: export
+        # The kernel stage is already in the builder's cache, even when the module build failed.
+        # Only the Module.symvers member is extracted from the stream.
+        if: always()
+        continue-on-error: true
+        run: |
+          source scripts/common.sh
+          cd /tmp/talos-pkgs
+          mkdir -p /tmp/symvers-x /tmp/r39-symvers
+          docker buildx build \
+            --builder talos-builder \
+            --file Pkgfile \
+            --target kernel-build \
+            --platform linux/arm64 \
+            --output "type=tar,dest=-" \
+            . | tar -x -C /tmp/symvers-x --wildcards --no-anchored 'Module.symvers' || true
+          BEST=$(find /tmp/symvers-x -name Module.symvers -printf '%s %p\n' | sort -n | tail -1 | cut -d' ' -f2-)
+          [ -n "${BEST}" ] || { echo "::warning::no Module.symvers found in the kernel-build stage"; exit 1; }
+          cp "${BEST}" /tmp/r39-symvers/Module.symvers
+          echo "exported ${BEST} ($(wc -l < /tmp/r39-symvers/Module.symvers) symbols)"
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save Module.symvers to the Actions cache
+        if: always() && steps.export.outputs.ok == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/r39-symvers/Module.symvers
+          key: ${{ needs.fast-compile.outputs.symvers_key }}
 
       - name: Summarize compiler errors
         if: always()
