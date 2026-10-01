@@ -70,6 +70,14 @@ steps:
         SYMS=/oot-src/out/Module.symvers.nvidia
         : > $SYMS
 
+        # The same two switches as the -D flags in KCFLAGS, but for the module Makefiles:
+        # nvidia-oot/drivers/gpu/Makefile exports them to its subdirectories, and the module
+        # directories are built one by one here. host1x/Makefile adds mipi.o (the
+        # tegra_mipi_driver that dev.c registers) only when CONFIG_DRM_TEGRA_HAVE_DISPLAY is set;
+        # without it host1x.ko fails in modpost with an undefined tegra_mipi_driver.
+        export CONFIG_HOST1X_HAVE_SYNCPT_BASE=y
+        export CONFIG_DRM_TEGRA_HAVE_DISPLAY=y
+
         # Build one out-of-tree module directory against the Talos kernel and add its
         # exported symbols for the modules that follow (order matters). -Werror is
         # dropped from all Makefiles because Clang warns where GCC does not.
