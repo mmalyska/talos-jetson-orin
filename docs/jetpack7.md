@@ -48,6 +48,29 @@ Archive URLs resolve (HTTP 200), pattern `https://gitlab.com/nvidia/nv-tegra/<re
 - **Device tree.** Between r36.5 and r39.2.0 the GPU, memory-controller and HWPM nodes of the standard Seeed J401 / Orin NX 16 GB DTB are unchanged; `host1x@13e00000` loses the `actmon` region/clock and gains `nvidia,syncpoint-shim` (new `nvidia,tegra234-syncpoint-shim` node at `memory@60000000`). r39 `drivers/gpu/host1x/dev.c` parses that phandle.
 - **Module tree layout.** r39 `nvidia-oot` has `drivers/gpu/{drm,host1x,host1x-emu,host1x-fence,host1x-nvhost,power}`, `drivers/video/tegra/{camera,dc,host,nvmap,tsec,virt}`; `host1x-emu` is new relative to what the r36 package builds.
 
-## Next (task A2/A3)
+## A2/A3: r39 package skeleton (2026-10-01)
 
-Add an r39 package next to `nvidia-tegra-nvgpu/` using the r39.2.1 pins above, mirroring its conftest/`oot()` build steps, and rebase the three existing patches.
+- **A2:** the fork's `main` was already identical to `schwankner/talos-jetson-orin` `main` (`ecf0921`), so there was nothing to sync. Work is on branch `feat/jetpack7-r39`.
+- **A3:** `nvidia-tegra-nvgpu-r39/pkg.yaml` (package name `nvidia-tegra-nvgpu-r39`) is a copy of `nvidia-tegra-nvgpu/pkg.yaml` with:
+  - the three sources replaced by the r39.2.1 gitlab tarballs, with sha256/sha512 computed from the downloaded archives (nvgpu 4.1 MB, nv-oot 19.7 MB, hwpm 0.2 MB);
+  - the patch loop tolerating empty patch directories (`patches/{nvgpu,nvidia-oot}/` hold only `.gitkeep` for now);
+  - the `-I .../drivers/gpu/host1x/include` flag dropped, because r39 has no such directory (`drivers/gpu/host1x-emu/include` and `host1x-fence/include` exist; add them if the build asks for them);
+  - everything else unchanged: the conftest step, the `oot()` build helper, the module list and order, signing, the install step.
+- **Static checks done:** every module directory the build step references exists in the extracted r39.2.1 trees (`host1x`, `platform/tegra/mc-utils`, `host1x-fence`, `host1x-nvhost`, `hwpm/drivers/tegra/hwpm`, `gpu/drm/tegra`, `video/tegra/nvmap`, `devfreq`, `nvgpu/drivers/gpu/nvgpu`); `scripts/conftest/Makefile` exists; the nvgpu Makefile still has the `CONFIG_TEGRA_GK20A_NVHOST*` switches the build sets. **Not done:** no real build (needs the Talos kernel-build stage, Docker and a few hours), so nothing here is proven to compile.
+- **Not wired in yet (task A7):** nothing builds this package. CI (`.github/workflows/build-extensions.yaml`) clones `siderolabs/pkgs` at a pinned commit, copies in `nvidia-tegra-nvgpu/` and builds `--target nvidia-tegra-nvgpu`; `auto-tag.yaml` watches `nvidia-tegra-nvgpu/pkg.yaml`. A second package needs the same injection and its own target/tag. `host1x-emu` (new in r39) is not built; decide in A5 whether Orin needs it.
+
+### Preview of A4: the existing patches against r39.2.1 (dry run, nothing applied)
+
+| Patch | Result | Action |
+|---|---|---|
+| `nvidia-oot/0001-tegra-drm-headless-no-fbdev.patch` | applies (offset of 4 lines) | keep, copy into `nvidia-tegra-nvgpu-r39/patches/nvidia-oot/` |
+| `nvgpu/0002-netlist-flexible-array.patch` | already applied in r39 (patch detected as reversed) | drop |
+| `nvgpu/0001-nvhost-syncpt-retry-and-skip-id0.patch` | both hunks fail: `nvhost_host1x.c` changed in r39 | needs a rewrite, and first a decision whether it is still needed |
+
+On the last one: r36's problem was that `host1x_syncpt_alloc()` returned NULL early and handed out syncpoint id 0, which GA10B rejects (`NVGPU_ERRATA_SYNCPT_INVALID_ID_0`). In r39, `nvgpu_nvhost_get_syncpt_client_managed()` already allocates with `HOST1X_SYNCPT_CLIENT_MANAGED | HOST1X_SYNCPT_GPU`, the DTB gained a syncpoint-shim node, and the r39 `host1x` parses it. The failure may be gone; the GA10B errata flag and its checks in `channel_user_syncpt.c` and `channel_sync_syncpt.c` are still present, so a hardware run decides. Plan: port the patch only if the first CUDA smoke test (error 999 on the first `cudaStreamSynchronize()`) shows the same failure.
+
+## Next
+
+Task A4/A5: rebase the patches and get the module set compiling against Linux 6.18.48 (build in CI or locally with the Talos kernel-build stage).
+
+
