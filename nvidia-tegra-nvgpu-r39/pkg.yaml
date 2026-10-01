@@ -99,6 +99,9 @@ steps:
         # (is_tegra_hypervisor_mode, tegra_hv_ivc_*, tegra_hv_mempool_*) that tegra_hv.ko
         # exports; on bare metal it only has to be loaded. Only that module of the directory
         # (obj-m on the command line overrides the Makefile).
+        # tegra_hv.ko in turn needs NVIDIA's extended IVC API (tegra_ivc_can_read, _read, _write,
+        # _empty, ...), which ivc_ext.ko exports on top of the in-tree tegra-ivc.
+        oot $OOT/drivers/firmware/tegra obj-m=ivc_ext.o
         oot $OOT/drivers/virt/tegra obj-m=tegra_hv.o
         oot $OOT/drivers/gpu/host1x
         oot $OOT/drivers/platform/tegra/mc-utils
