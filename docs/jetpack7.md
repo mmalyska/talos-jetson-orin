@@ -178,6 +178,10 @@ An explicit `NVGPU_VERSION` or `FIRMWARE_EXT_TAG` in the environment still wins.
 - **Licensing.** The extensions redistribute NVIDIA proprietary binaries (libraries and firmware) through your own ghcr.io; keep those packages private. The r36 firmware extension already did this for firmware; r36 downloaded the libraries from NVIDIA at run time instead.
 - **Open until a boot:** Talos accepting `/usr/local/lib/nvidia-tegra` content from an extension and the CDI bind mount finding it on the host; `libnvsciipc` behaviour without `/dev/nvsciipc` (not created, as `nvsciipc.ko` is not built); `libcuda` initialising against the r39 `nvgpu` (CUDA error 999 would call for the deferred syncpoint patch).
 
+## Release run 1 (37019793406): manifest YAML
+
+Extensions job passed. UKI assembly failed in the imager: `error loading extension 3: go-yaml load error in scanner at L6.C48: mapping values are not allowed in this context`. The `nvidia-tegra-userspace` description had an unquoted `CUDA: libcuda`. Fix: `write_ctx` quotes the description and parses the generated manifest (yq or PyYAML) before building. `USERSPACE_EXT_TAG` bumped to `r39.2.1-v2`, because the build step skips tags that already exist in ghcr and `r39.2.1-v1` holds the bad manifest. Firmware ext (`r39-v1`) was fine and is reused.
+
 ## Next
 
 A `release.yaml` run with `jetpack = r39` (assembles the UKI, the installer `custom-installer:v1.14.0-6.18.48-nvgpu39.2.1-jp7` and the USB image from the three pushed extensions), then the Phase B/C hardware steps in the home-ops plan.

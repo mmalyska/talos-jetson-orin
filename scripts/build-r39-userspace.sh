@@ -134,16 +134,25 @@ done
 info "firmware: $(find "${FW_OUT}/ga10b" -type f | wc -l) files, $(du -sh "${FW_OUT}/ga10b" | cut -f1)"
 
 # ── 5. extension manifests and build contexts ────────────────────────────────
-write_ctx() { # write_ctx <dir> <name> <version> <description>
-  printf 'version: v1alpha1\nmetadata:\n  name: %s\n  version: %s\n  author: custom-build\n  description: %s\n  compatibility:\n    talos:\n      version: ">= 1.12.6"\n' \
+# The Talos imager parses manifest.yaml strictly; an unquoted ": " in the description broke the
+# first published userspace extension (CI run 37019793406), so quote it and parse the result.
+check_yaml() { # check_yaml <file>
+  if command -v yq >/dev/null 2>&1; then yq '.' "$1" >/dev/null
+  elif python3 -c 'import yaml' 2>/dev/null; then python3 -c 'import sys, yaml; yaml.safe_load(open(sys.argv[1]))' "$1"
+  else warn "no YAML parser available, ${1} not checked"; fi
+}
+write_ctx() { # write_ctx <dir> <name> <version> <description (no double quotes)>
+  [[ "$4" != *'"'* ]] || error "description must not contain double quotes: $4"
+  printf 'version: v1alpha1\nmetadata:\n  name: %s\n  version: %s\n  author: custom-build\n  description: "%s"\n  compatibility:\n    talos:\n      version: ">= 1.12.6"\n' \
     "$2" "$3" "$4" > "$1/manifest.yaml"
+  check_yaml "$1/manifest.yaml" || error "invalid YAML in $1/manifest.yaml"
   printf 'FROM scratch\nCOPY manifest.yaml /manifest.yaml\nCOPY rootfs /rootfs\n' > "$1/Dockerfile"
 }
 BSP_REL="$(basename "${DEBS_DIR}"/nvidia-l4t-core_*_arm64.deb | sed 's/^nvidia-l4t-core_//; s/_arm64.deb$//')"
 write_ctx "${OUT}/firmware" nvidia-firmware-ext "${FIRMWARE_EXT_TAG}" \
   "NVIDIA GA10B firmware from JetPack 7.2 (Jetson Linux ${BSP_REL})"
 write_ctx "${OUT}/userspace" nvidia-tegra-userspace "${USERSPACE_EXT_TAG}" \
-  "NVIDIA Jetson userspace for CUDA: libcuda and its runtime libraries from JetPack 7.2 (Jetson Linux ${BSP_REL})"
+  "NVIDIA Jetson userspace for CUDA (libcuda and its runtime libraries) from JetPack 7.2, Jetson Linux ${BSP_REL}"
 
 # ── 6. images ────────────────────────────────────────────────────────────────
 if [[ "${PUSH}" == "1" ]]; then
