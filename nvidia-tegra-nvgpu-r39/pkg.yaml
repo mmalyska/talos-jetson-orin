@@ -146,12 +146,22 @@ steps:
         find $MOD -name '*.ko' -exec /src/scripts/sign-file sha512 \
           /src/certs/signing_key.pem /src/certs/signing_key.x509 {} \;
 
-        # Load order: tegra-drm needs the OE4T host1x stack; nvgpu needs all of it.
+        # Load order, mirroring the symbol dependencies of the built modules (r39 CI run
+        # 36895200467): tegra_hv -> ivc_ext; host1x-nvhost and host1x-fence -> host1x, and
+        # host1x-fence also uses the nvhost_* exports of host1x-nvhost; tegra-drm -> host1x,
+        # nvhwpm, tegra_hv; nvmap and mc-utils -> tegra_hv; nvgpu -> tegra_hv, nvmap,
+        # host1x-fence, mc-utils. tegra_hv and ivc_ext stand in for symbols NVIDIA's own
+        # kernel exports built in.
         mkdir -p /rootfs/usr/lib/modprobe.d
-        printf 'softdep tegra-drm pre: tegra_hv host1x host1x-fence host1x-nvhost\n' \
-          > /rootfs/usr/lib/modprobe.d/nvidia-tegra.conf
-        printf 'softdep nvgpu pre: tegra_hv host1x nvmap host1x-fence host1x-nvhost tegra-drm mc-utils\n' \
-          >> /rootfs/usr/lib/modprobe.d/nvidia-tegra.conf
+        cat > /rootfs/usr/lib/modprobe.d/nvidia-tegra.conf <<'CONF'
+        softdep tegra_hv pre: ivc_ext
+        softdep host1x-nvhost pre: host1x
+        softdep host1x-fence pre: host1x host1x-nvhost
+        softdep nvmap pre: tegra_hv
+        softdep mc-utils pre: tegra_hv
+        softdep tegra-drm pre: tegra_hv host1x host1x-nvhost host1x-fence nvhwpm
+        softdep nvgpu pre: tegra_hv host1x host1x-nvhost host1x-fence nvmap tegra-drm mc-utils
+        CONF
 
         # build-extensions.sh takes the kernel image and signing cert from here to
         # assemble custom-installer without exporting the whole kernel-build stage.
