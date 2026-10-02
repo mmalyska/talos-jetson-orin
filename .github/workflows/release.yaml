@@ -88,6 +88,13 @@ jobs:
           INSTALLER_OUT="$(pwd)/dist/installer-out"
           mkdir -p "${INSTALLER_OUT}"
 
+          # JetPack r39: libcuda and its runtime libraries are one more system extension
+          USERSPACE_EXT_ENTRY=""
+          if [ -n "${USERSPACE_EXT_TAG:-}" ]; then
+            USERSPACE_EXT_ENTRY=$(printf '    - imageRef: ghcr.io/%s/nvidia-tegra-userspace:%s\n      forceInsecure: false' \
+              "${{ github.repository_owner }}" "${USERSPACE_EXT_TAG}")
+          fi
+
           # Same profile as build-uki.sh but output.kind=installer + outFormat=docker
           PROFILE=$(cat <<EOF
           arch: arm64
@@ -113,6 +120,7 @@ jobs:
                 forceInsecure: false
               - imageRef: ghcr.io/${{ github.repository_owner }}/nvidia-firmware-ext:${FIRMWARE_EXT_TAG}
                 forceInsecure: false
+          ${USERSPACE_EXT_ENTRY}
           customization:
             extraKernelArgs:
               # Serial console for UART debug.

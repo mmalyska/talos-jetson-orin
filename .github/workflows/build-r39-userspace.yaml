@@ -1,0 +1,67 @@
+name: Build r39 userspace
+
+# Checks scripts/build-r39-userspace.sh: downloads the Jetson Linux r39.2.1 BSP (1.3 GB, checksum
+# pinned in the script), extracts the three debs it needs, assembles the firmware and userspace
+# extensions, verifies the library closure of libcuda, and builds both images (a FROM scratch
+# image each, exported to disk, not pushed). About 5 minutes.
+#
+# Pushing to ghcr.io happens in the "Build Extensions" workflow (jetpack = r39); run this one
+# with push = true only to publish just these two extensions.
+#
+# Triggers: push to feat/jetpack7-r39 that touches the script or this file, and
+# workflow_dispatch (available once the file is on the default branch).
+
+on:
+  push:
+    branches: [feat/jetpack7-r39]
+    paths:
+      - scripts/build-r39-userspace.sh
+      - scripts/common.sh
+      - .github/workflows/build-r39-userspace.yaml
+  workflow_dispatch:
+    inputs:
+      push:
+        description: Push nvidia-firmware-ext and nvidia-tegra-userspace to ghcr.io
+        type: boolean
+        default: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  JETPACK: r39
+
+concurrency:
+  group: build-r39-userspace-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Assemble and check the r39 extensions
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 45
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Log in to GitHub Container Registry
+        if: inputs.push
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the extensions
+        env:
+          REGISTRY_DOCKER: ghcr.io/${{ github.repository_owner }}
+          PUSH: ${{ inputs.push && '1' || '0' }}
+        run: scripts/build-r39-userspace.sh
+
+      - name: Show the packaged files
+        run: |
+          find /tmp/r39-userspace/out/firmware/rootfs /tmp/r39-userspace/out/userspace/rootfs \( -type f -o -type l \) | sort
+          cat /tmp/r39-userspace/out/firmware/manifest.yaml /tmp/r39-userspace/out/userspace/manifest.yaml

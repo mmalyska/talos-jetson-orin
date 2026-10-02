@@ -98,6 +98,14 @@ else
   FORCE_INSECURE=true
 fi
 
+# JetPack r39 ships libcuda and its runtime libraries as one more system extension
+# (scripts/build-r39-userspace.sh); r36 downloads them on the node, so the entry stays empty.
+USERSPACE_EXT_ENTRY=""
+if [[ -n "${USERSPACE_EXT_TAG:-}" ]]; then
+  USERSPACE_EXT_ENTRY="    - imageRef: ${REGISTRY_DOCKER}/nvidia-tegra-userspace:${USERSPACE_EXT_TAG}
+      forceInsecure: ${FORCE_INSECURE}"
+fi
+
 PROFILE=$(cat <<EOF
 arch: arm64
 platform: metal
@@ -122,6 +130,7 @@ input:
       forceInsecure: ${FORCE_INSECURE}
     - imageRef: ${REGISTRY_DOCKER}/nvidia-firmware-ext:${FIRMWARE_EXT_TAG}
       forceInsecure: ${FORCE_INSECURE}
+${USERSPACE_EXT_ENTRY}
 customization:
   extraKernelArgs:
     # Serial console for UART debug.
