@@ -98,8 +98,37 @@ Triggers: a push to `feat/jetpack7-r39` that touches `nvidia-tegra-nvgpu-r39/**`
 - Patches in `nvidia-tegra-nvgpu-r39/patches/`: `nvidia-oot/0001-tegra-drm-headless-no-fbdev` (r36 patch, applies with an offset) and `nvidia-oot/0002-nvmap-ivc-stubs-without-sciipc` (new). Dropped: `nvgpu/0002-netlist-flexible-array` (already upstream in r39). Deferred: `nvgpu/0001-nvhost-syncpt-retry-and-skip-id0`, only if the first CUDA smoke test shows error 999 on `cudaStreamSynchronize()`.
 - The fast job builds with the distro Clang 21.1.8, not the Talos LLVM, and with signing and BTF off. It cannot show anything about the real kernel's module-signing key, the final `.ko` paths or vermagic: the full job does.
 
+## A6: ABI, dependencies and load order (2026-10-02, on the run 7 output)
+
+- **host1x / tegra-drm ABI.** Compared the `__versions` CRCs each module imports with the CRCs the providing module exports (`__kcrctab` / `__kcrctab_gpl`), across the 12 built modules: 138 cross-module symbol imports, 0 mismatches. `tegra-drm` uses 61 `host1x` symbols (including `host1x_job_alloc`, the one whose mismatch broke r36 with the vanilla host1x), 2 of `nvhwpm`, 8 of `tegra_hv`. The two shadow copies (`kernel/drivers/gpu/host1x/host1x.ko`, `kernel/drivers/gpu/drm/tegra/tegra-drm.ko`) are byte-identical to the ones in `extra/nvidia-tegra/`. In the Talos 6.18.48 config only `CONFIG_TEGRA_HOST1X=m` and `CONFIG_DRM_TEGRA=m` use host1x (no `VIDEO_TEGRA`, no `TEGRA_VDE`), and both are shadowed, so no module built against the vanilla ABI remains. `host1x-fence` imports the `nvhost_*` symbols from `host1x-nvhost` without a CRC (modpost ran in warn mode for it), so those are matched by name only; both come from the same tree.
+- **Against NVIDIA's own r39 Orin build** (prebuilt modules in Seeed's `Linux_for_Tegra` branch `r39.2.0`): the module set is identical (`governor_pod_scaling`, `tegra_wmark`, `ivc_ext`, `tegra-drm`, `host1x`, `host1x-fence`, `host1x-nvhost`, `mc-utils`, `nvmap`, `tegra_hv`, `nvhwpm`, `nvgpu`). Differences in `depends=`:
+  - NVIDIA's `nvgpu.ko` imports exactly the same 11 `tegra_hv_*`/`is_tegra_hypervisor_mode` symbols as ours, but its kernel (`drivers/virt/tegra/` and `drivers/firmware/tegra` built in, tree `kernel-noble`) exports them, so NVIDIA's `tegra_hv.ko` and `ivc_ext.ko` are 8 KB empty placeholders. The Talos kernel is mainline-based and lacks those exports, so the real OOT `tegra_hv.ko` and `ivc_ext.ko` (the sources NVIDIA ships for kernels without them) are the right substitute.
+  - NVIDIA's `nvmap` depends on `nvsciipc` (built with NvSciIpc); ours is built without it, with the stub patch. That drops inter-VM / NvSciBuf sharing, not plain CUDA. Not exercised until a hardware test.
+  - NVIDIA's `tegra-drm` depends on `drm_display_helper`, `cec`, `drm_dp_aux_bus`; ours does not, because `DRM_DISPLAY_HELPER` and `CEC_CORE` are built into the Talos kernel.
+  - NVIDIA's kernel is `6.8.12-1021-tegra` with `preempt`; Talos is `6.18.48-talos` without it.
+- **`tegra_hv` on bare metal.** `tegra_hv_init()` only registers a platform driver, so module load always succeeds. `tegra_hv_probe()` runs only for a DT node `nvidia,tegra-hv` (absent on Orin) and returns `-ENODEV` unless `/chosen` has `nvidia,tegra-hypervisor-mode`. `is_tegra_hypervisor_mode()` therefore returns false, which is what nvgpu, nvmap, tegra-drm and mc-utils use to skip their virtualization paths, and the IVC/mempool entry points return an error because nothing probed. Still to be confirmed on a boot.
+- **Load order for the node config** (`machine.kernel.modules`; symbol-dependency correct, which matters if Talos loads strictly in list order; r36's list had `host1x_fence` before `host1x_nvhost`, which no longer works because fence needs nvhost's exports):
+
+  ```yaml
+  modules:
+    - name: ivc_ext
+    - name: tegra_hv
+    - name: host1x
+    - name: host1x_nvhost
+    - name: host1x_fence
+    - name: nvhwpm
+    - name: tegra_drm
+    - name: nvmap
+    - name: mc_utils
+    - name: nvgpu
+    - name: governor_pod_scaling
+  ```
+
+  `nvhwpm` was resolved as a dependency of `tegra_drm` in r36 (it is not in the current list); it is named here to be safe.
+- **modprobe softdeps** in the package (`nvidia-tegra.conf`) now mirror these dependencies (commit `ee33f43`); the previous file missed the host1x-fence to host1x-nvhost ordering and the new modules. Validated by CI run 36981825061 (verify step greps it).
+
 ## Next
 
-After the full job: A6 (check the DRM/host1x ABI shadowing and softdep order on the built output), A7 (wire the r39 package into the release workflows and installer build), A8 (r39 userspace libs and firmware for the CDI setup).
+A7 (wire the r39 package into the release workflows and installer build), A8 (r39 userspace libs and firmware for the CDI setup), then the Phase B/C hardware steps in the home-ops plan.
 
 
