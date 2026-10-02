@@ -103,13 +103,6 @@ steps:
         # _empty, ...), which ivc_ext.ko exports on top of the in-tree tegra-ivc.
         oot $OOT/drivers/firmware/tegra obj-m=ivc_ext.o
         oot $OOT/drivers/virt/tegra obj-m=tegra_hv.o
-        # nvmap is built with NvSciIpc support (as NVIDIA builds it) and imports the NvSciIpc*
-        # exports of nvsciipc.ko, which in turn uses the tegra_hv helpers and two exports of
-        # ivc-cdev.ko (ivc_cdev_get_peer_vmid, ivc_cdev_get_noti_type; NVIDIA's nvsciipc.ko
-        # depends on ivc-cdev too). nvsciipc registers its own platform device, so it needs
-        # no device-tree node.
-        oot $OOT/drivers/virt/tegra obj-m=ivc-cdev.o
-        oot $OOT/drivers/misc/nvsciipc
         oot $OOT/drivers/gpu/host1x
         oot $OOT/drivers/platform/tegra/mc-utils
         oot $OOT/drivers/gpu/host1x-fence
@@ -117,10 +110,11 @@ steps:
         oot /oot-src/hwpm/drivers/tegra/hwpm
         # headless: no fbdev (the kernel config has it enabled, so it must be forced off)
         oot $OOT/drivers/gpu/drm/tegra CONFIG_DRM_FBDEV_EMULATION=n
-        # NVMAP_CONFIG_HANDLE_AS_ID=n is the r36 setting (the OE4T default is handle-as-id, not
-        # wanted here and known to work with the r36 userspace); NvSciIpc is on, like NVIDIA's
-        # own build, so nvmap_sci_ipc.c provides nvmap_init_ivc_queue() and friends.
-        oot $OOT/drivers/video/tegra/nvmap NVMAP_CONFIG_HANDLE_AS_ID=n NVMAP_CONFIG_SCIIPC=y
+        # The OE4T defaults are handle-as-id and NvSciIpc support, neither is wanted here (r36
+        # setting, known to work with the r36 userspace). Without NvSciIpc, nvmap_sci_ipc.c is
+        # not built; patch 0002 supplies inline no-op stubs for the IVC functions it would define,
+        # so nvmap.ko needs neither nvsciipc.ko nor ivc-cdev.ko.
+        oot $OOT/drivers/video/tegra/nvmap NVMAP_CONFIG_HANDLE_AS_ID=n NVMAP_CONFIG_SCIIPC=n
         oot $OOT/drivers/devfreq
         # syncpoints through the OE4T host1x (the kernel has neither GRHOST nor HOST1X_NEXT)
         oot /oot-src/nvgpu/drivers/gpu/nvgpu CONFIG_TEGRA_GK20A_NVHOST=y CONFIG_TEGRA_GK20A_NVHOST_HOST1X=y
@@ -165,7 +159,7 @@ steps:
         # Load order, mirroring the symbol dependencies of the built modules (r39 CI run
         # 36895200467): tegra_hv -> ivc_ext; host1x-nvhost and host1x-fence -> host1x, and
         # host1x-fence also uses the nvhost_* exports of host1x-nvhost; tegra-drm -> host1x,
-        # nvhwpm, tegra_hv; ivc-cdev and mc-utils -> tegra_hv; nvsciipc -> tegra_hv, ivc-cdev; nvmap -> tegra_hv, nvsciipc; nvgpu -> tegra_hv, nvmap,
+        # nvhwpm, tegra_hv; nvmap and mc-utils -> tegra_hv; nvgpu -> tegra_hv, nvmap,
         # host1x-fence, mc-utils. tegra_hv and ivc_ext stand in for symbols NVIDIA's own
         # kernel exports built in.
         mkdir -p /rootfs/usr/lib/modprobe.d
@@ -173,12 +167,10 @@ steps:
         softdep tegra_hv pre: ivc_ext
         softdep host1x-nvhost pre: host1x
         softdep host1x-fence pre: host1x host1x-nvhost
-        softdep ivc-cdev pre: tegra_hv
-        softdep nvsciipc pre: tegra_hv ivc-cdev
-        softdep nvmap pre: tegra_hv ivc-cdev nvsciipc
+        softdep nvmap pre: tegra_hv
         softdep mc-utils pre: tegra_hv
         softdep tegra-drm pre: tegra_hv host1x host1x-nvhost host1x-fence nvhwpm
-        softdep nvgpu pre: tegra_hv ivc-cdev nvsciipc host1x host1x-nvhost host1x-fence nvmap tegra-drm mc-utils
+        softdep nvgpu pre: tegra_hv host1x host1x-nvhost host1x-fence nvmap tegra-drm mc-utils
         CONF
 
         # build-extensions.sh takes the kernel image and signing cert from here to
