@@ -266,7 +266,7 @@ jobs:
           find "${OUT}" -name "*.ko" -exec ls -l {} \; | sort -k9
 
           FAIL=0
-          for mod in nvgpu host1x host1x-fence host1x-nvhost nvhwpm tegra-drm nvmap mc-utils tegra_hv ivc_ext; do
+          for mod in nvgpu host1x host1x-fence host1x-nvhost nvhwpm tegra-drm nvmap mc-utils tegra_hv ivc_ext nvsciipc; do
             if find "${OUT}" -name "${mod}.ko" | grep -q .; then echo "  ✓ ${mod}.ko"
             else echo "  ✗ ${mod}.ko MISSING"; FAIL=1; fi
           done
@@ -276,6 +276,11 @@ jobs:
             if [ -f "${MODDIR}/${shadow}" ]; then echo "  ✓ shadow path ${shadow}"
             else echo "  ✗ shadow path ${shadow} MISSING"; FAIL=1; fi
           done
+
+          # debug info must be stripped: nvgpu.ko was 414 MB unstripped, 7.6 MB is NVIDIA's size
+          NVGPU_KB=$(( $(stat -c %s "${MODDIR}/extra/nvidia-tegra/nvgpu.ko") / 1024 ))
+          if [ "${NVGPU_KB}" -gt 51200 ]; then echo "  ✗ nvgpu.ko is ${NVGPU_KB} KB, debug info not stripped"; FAIL=1
+          else echo "  ✓ nvgpu.ko ${NVGPU_KB} KB"; fi
 
           # every module must carry a signature and the kernel's vermagic
           while IFS= read -r ko; do

@@ -109,7 +109,7 @@ run_scripts() { # run_scripts <yq path> <workdir>
 
 echo "=== modules built ==="
 find /oot-src -name '*.ko' | sort
-for mod in host1x host1x-fence host1x-nvhost nvhwpm tegra-drm nvmap mc-utils nvgpu tegra_hv ivc_ext; do
+for mod in host1x host1x-fence host1x-nvhost nvhwpm tegra-drm nvmap mc-utils nvgpu tegra_hv ivc_ext nvsciipc; do
   find /oot-src -name "${mod}.ko" | grep -q . && echo "  ✓ ${mod}.ko" || { echo "  ✗ ${mod}.ko MISSING"; exit 1; }
 done
 echo "✓ r39 compile check passed"
