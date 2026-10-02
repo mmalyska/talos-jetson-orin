@@ -244,6 +244,19 @@ ghcr.io/schwankner/custom-installer:v1.14.0-6.18.48-nvgpu5.13.0-drm-noshim
 
 ---
 
+## JetPack 7.2 (r39) line — experimental
+
+`JETPACK=r39` selects a second build line: the nvgpu driver from NVIDIA's own r39.2.1 sources (package `nvidia-tegra-nvgpu-r39/`, CUDA 13) instead of the OE4T r36.5 one. The default stays `r36`. Status, differences and run history: [docs/jetpack7.md](docs/jetpack7.md).
+
+```bash
+# CI: Actions → "Build Extensions" or "Build USB Image" → choose jetpack = r39
+# local: JETPACK=r39 make build-extensions
+```
+
+Not usable end to end yet: the r39 firmware extension and the r39 userspace libraries for the CDI setup are still missing, and nothing has been booted on hardware. Flashing JetPack 7 firmware onto a Jetson changes the device tree the r36 image relies on; do not do that to a node that must keep running the r36 image.
+
+---
+
 ## Versions
 
 | Component | Version |

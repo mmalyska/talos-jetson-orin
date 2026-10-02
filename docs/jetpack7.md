@@ -136,8 +136,30 @@ The kernel side of NvSciIpc is not built (see run 10 above), but the userspace l
   `nvhwpm` was resolved as a dependency of `tegra_drm` in r36 (it is not in the current list); it is named here to be safe.
 - **modprobe softdeps** in the package (`nvidia-tegra.conf`) now mirror these dependencies (commit `ee33f43`); the previous file missed the host1x-fence to host1x-nvhost ordering and the new modules. Validated by CI run 36981825061 (verify step greps it).
 
+## A7: wiring the r39 package into the build and release path (2026-10-02)
+
+One switch, `JETPACK` (`r36` by default, or `r39`), read by `scripts/common.sh`:
+
+| | r36 (default, unchanged) | r39 |
+|---|---|---|
+| package directory / build target | `nvidia-tegra-nvgpu` | `nvidia-tegra-nvgpu-r39` |
+| `NVGPU_VERSION` | `5.13.0-drm-noshim` | `39.2.1-jp7` |
+| `FIRMWARE_EXT_TAG` | `v5` | `r39-v1` |
+| nvgpu extension image | `nvidia-tegra-nvgpu:5.13.0-drm-noshim-6.18.48-talos` | `nvidia-tegra-nvgpu:39.2.1-jp7-6.18.48-talos` |
+| installer for `talosctl upgrade` | `custom-installer:v1.14.0-6.18.48-nvgpu5.13.0-drm-noshim` | `custom-installer:v1.14.0-6.18.48-nvgpu39.2.1-jp7` |
+| USB image | `talos-usb-nvgpu5.13.0-drm-noshim.raw` | `talos-usb-nvgpu39.2.1-jp7.raw` |
+
+An explicit `NVGPU_VERSION` or `FIRMWARE_EXT_TAG` in the environment still wins. The r36 derived values were compared before and after the change and are identical.
+
+- **Scripts:** `common.sh` (switch, `NVGPU_PKG`), `build-extensions.sh` (package directory, build target, extension description), `setup-keys.sh` (copies the signing key into the selected package directory). `build-uki.sh`, `build-usb-image.sh` and the Makefile already take everything from `common.sh`, so they follow the switch without changes.
+- **Shared images.** The kernel, the in-tree modules (`kernel-modules-clang`) and the base installer (`custom-installer:<talos>-<kernel>`) depend on the Talos version and kernel config, not on the nvgpu package. With `JETPACK=r39`, `build-extensions.sh` reuses them when both are already in the registry, instead of overwriting tags the r36 flow consumes (`REBUILD_SHARED=1` forces a rebuild). r36 always rebuilds, as before.
+- **Workflows:** `build-extensions.yaml` and `release.yaml` take a `jetpack` input (`workflow_dispatch` choice, and `workflow_call` input passed down from `release.yaml`), exported as `JETPACK`; tag pushes keep building r36. The r39 package directory is injected into the `siderolabs/pkgs` clone instead of the r36 one. `ci.yaml` validates both `pkg.yaml` files. The r39 USB artifact gets an `-r39` suffix. `auto-tag.yaml` still derives tags from the default (r36) values, so nothing releases r39 by itself.
+- **Kernel cache export** (`mode=max`, every kernel layer): `build-extensions.sh` skips it with `SKIP_KERNEL_CACHE_EXPORT=1`, which the workflow sets for r39. The export coincided with a runner losing contact in run 36865915462 (cause not established); until it is, r39 builds recompile the kernel (about 80 min) when the kernel cache tag is missing.
+- **Not done here (task A8):** the r39 firmware extension. The existing firmware step reads the r36 apt repository and is skipped for r39, so it does not publish r36 firmware under the r39 tag; `nvidia-firmware-ext:r39-v1` does not exist yet, which means the r39 UKI/USB assembly in `release.yaml` cannot complete until A8 adds it. The CDI userspace libraries are also A8.
+- **Not run yet:** none of this has run in CI. The changes are checked for shell/YAML syntax and the variable derivation is compared, but a real run is the first test of `build-extensions.yaml` with `jetpack=r39`: `gh workflow run build-extensions.yaml --ref feat/jetpack7-r39 -f jetpack=r39` (it pushes `nvidia-tegra-nvgpu:39.2.1-jp7-6.18.48-talos` to ghcr.io, plus the shared images if they are missing).
+
 ## Next
 
-A7 (wire the r39 package into the release workflows and installer build), A8 (r39 userspace libs and firmware for the CDI setup), then the Phase B/C hardware steps in the home-ops plan.
+A first `build-extensions.yaml` run with `jetpack=r39`, A8 (r39 firmware extension and userspace libs for the CDI setup), then the Phase B/C hardware steps in the home-ops plan.
 
 
