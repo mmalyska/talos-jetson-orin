@@ -266,7 +266,7 @@ jobs:
           find "${OUT}" -name "*.ko" -exec ls -l {} \; | sort -k9
 
           FAIL=0
-          for mod in nvgpu host1x host1x-fence host1x-nvhost nvhwpm tegra-drm nvmap mc-utils tegra_hv ivc_ext nvsciipc; do
+          for mod in nvgpu host1x host1x-fence host1x-nvhost nvhwpm tegra-drm nvmap mc-utils tegra_hv ivc_ext nvsciipc ivc-cdev; do
             if find "${OUT}" -name "${mod}.ko" | grep -q .; then echo "  ✓ ${mod}.ko"
             else echo "  ✗ ${mod}.ko MISSING"; FAIL=1; fi
           done

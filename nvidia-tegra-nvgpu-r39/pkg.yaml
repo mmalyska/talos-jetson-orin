@@ -104,8 +104,11 @@ steps:
         oot $OOT/drivers/firmware/tegra obj-m=ivc_ext.o
         oot $OOT/drivers/virt/tegra obj-m=tegra_hv.o
         # nvmap is built with NvSciIpc support (as NVIDIA builds it) and imports the NvSciIpc*
-        # exports of nvsciipc.ko, which in turn uses the tegra_hv helpers. The module registers
-        # its own platform device, so it needs no device-tree node.
+        # exports of nvsciipc.ko, which in turn uses the tegra_hv helpers and two exports of
+        # ivc-cdev.ko (ivc_cdev_get_peer_vmid, ivc_cdev_get_noti_type; NVIDIA's nvsciipc.ko
+        # depends on ivc-cdev too). nvsciipc registers its own platform device, so it needs
+        # no device-tree node.
+        oot $OOT/drivers/virt/tegra obj-m=ivc-cdev.o
         oot $OOT/drivers/misc/nvsciipc
         oot $OOT/drivers/gpu/host1x
         oot $OOT/drivers/platform/tegra/mc-utils
@@ -162,7 +165,7 @@ steps:
         # Load order, mirroring the symbol dependencies of the built modules (r39 CI run
         # 36895200467): tegra_hv -> ivc_ext; host1x-nvhost and host1x-fence -> host1x, and
         # host1x-fence also uses the nvhost_* exports of host1x-nvhost; tegra-drm -> host1x,
-        # nvhwpm, tegra_hv; nvsciipc and mc-utils -> tegra_hv; nvmap -> tegra_hv, nvsciipc; nvgpu -> tegra_hv, nvmap,
+        # nvhwpm, tegra_hv; ivc-cdev and mc-utils -> tegra_hv; nvsciipc -> tegra_hv, ivc-cdev; nvmap -> tegra_hv, nvsciipc; nvgpu -> tegra_hv, nvmap,
         # host1x-fence, mc-utils. tegra_hv and ivc_ext stand in for symbols NVIDIA's own
         # kernel exports built in.
         mkdir -p /rootfs/usr/lib/modprobe.d
@@ -170,11 +173,12 @@ steps:
         softdep tegra_hv pre: ivc_ext
         softdep host1x-nvhost pre: host1x
         softdep host1x-fence pre: host1x host1x-nvhost
-        softdep nvsciipc pre: tegra_hv
-        softdep nvmap pre: tegra_hv nvsciipc
+        softdep ivc-cdev pre: tegra_hv
+        softdep nvsciipc pre: tegra_hv ivc-cdev
+        softdep nvmap pre: tegra_hv ivc-cdev nvsciipc
         softdep mc-utils pre: tegra_hv
         softdep tegra-drm pre: tegra_hv host1x host1x-nvhost host1x-fence nvhwpm
-        softdep nvgpu pre: tegra_hv nvsciipc host1x host1x-nvhost host1x-fence nvmap tegra-drm mc-utils
+        softdep nvgpu pre: tegra_hv ivc-cdev nvsciipc host1x host1x-nvhost host1x-fence nvmap tegra-drm mc-utils
         CONF
 
         # build-extensions.sh takes the kernel image and signing cert from here to
