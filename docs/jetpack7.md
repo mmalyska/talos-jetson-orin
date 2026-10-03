@@ -182,8 +182,22 @@ An explicit `NVGPU_VERSION` or `FIRMWARE_EXT_TAG` in the environment still wins.
 
 Extensions job passed. UKI assembly failed in the imager: `error loading extension 3: go-yaml load error in scanner at L6.C48: mapping values are not allowed in this context`. The `nvidia-tegra-userspace` description had an unquoted `CUDA: libcuda`. Fix: `write_ctx` quotes the description and parses the generated manifest (yq or PyYAML) before building. `USERSPACE_EXT_TAG` bumped to `r39.2.1-v2`, because the build step skips tags that already exist in ghcr and `r39.2.1-v1` holds the bad manifest. Firmware ext (`r39-v1`) was fine and is reused.
 
+## Release run 2 (37064190229): green
+
+`release.yaml` with `jetpack = r39`, 2026-10-02/03. Extensions job: pushed `nvidia-tegra-nvgpu:39.2.1-jp7-6.18.48-talos`, `nvidia-firmware-ext:r39-v1`, `nvidia-tegra-userspace:r39.2.1-v2`. Assembly job: the imager accepted all four extensions, UKI 547 MB, USB image `talos-usb-nvgpu39.2.1-jp7.raw` 700 MB (artifact `talos-jetson-usb-feat-jetpack7-r39-r39`, 573 MB compressed), installer `custom-installer:v1.14.0-6.18.48-nvgpu39.2.1-jp7` pushed (digest `sha256:01e7758421052c4310286b8ee00ba66334e13fd374bfa71d1816267dbb5ce5f5`). Build-time result only: nothing has booted on hardware.
+
+## Flashing the board (Phase B notes, not run on hardware)
+
+Firmware and DTB come from Seeed's `Linux_for_Tegra` branch `r39.2.0` on the NVIDIA r39.2.0 BSP, config `recomputer-orin-j401` (standard J401, Orin NX 16 GB). To leave the NVMe alone, flash the QSPI only, as Seeed's CI does for its production images:
+
+```sh
+sudo ./tools/kernel_flash/l4t_initrd_flash.sh \
+  -p "-c bootloader/generic/cfg/flash_t234_qspi.xml --no-systemimg" \
+  --showlogs --network usb0 recomputer-orin-j401 external
+```
+
+`flash_t234_qspi.xml` declares only the SPI device. Do not use the README's `--external-device nvme0n1p1 … internal` command, which writes the NVMe. Run it with `--no-flash` first to check the generated package and the overlay list (`tegra234-carveouts.dtbo`). Checklist, rollback kit and open points: `docs/superpowers/plans/artifacts/2026-10-03-r39-phase-b-flash-rollback.md` in home-ops.
+
 ## Next
 
-A `release.yaml` run with `jetpack = r39` (assembles the UKI, the installer `custom-installer:v1.14.0-6.18.48-nvgpu39.2.1-jp7` and the USB image from the three pushed extensions), then the Phase B/C hardware steps in the home-ops plan.
-
-
+Phase B in home-ops (flash host, dry runs, rollback kit), then the hardware bring-up: boot `talos-usb-nvgpu39.2.1-jp7.raw` in maintenance mode and read `dmesg` before applying any config.
