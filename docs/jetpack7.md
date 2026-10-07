@@ -186,6 +186,10 @@ Extensions job passed. UKI assembly failed in the imager: `error loading extensi
 
 `release.yaml` with `jetpack = r39`, 2026-10-02/03. Extensions job: pushed `nvidia-tegra-nvgpu:39.2.1-jp7-6.18.48-talos`, `nvidia-firmware-ext:r39-v1`, `nvidia-tegra-userspace:r39.2.1-v2`. Assembly job: the imager accepted all four extensions, UKI 547 MB, USB image `talos-usb-nvgpu39.2.1-jp7.raw` 700 MB (artifact `talos-jetson-usb-feat-jetpack7-r39-r39`, 573 MB compressed), installer `custom-installer:v1.14.0-6.18.48-nvgpu39.2.1-jp7` pushed (digest `sha256:01e7758421052c4310286b8ee00ba66334e13fd374bfa71d1816267dbb5ce5f5`). Build-time result only: nothing has booted on hardware.
 
+## Release run 3 (37633299032): Talos v1.14.2, kernel 6.18.54
+
+`release.yaml` with `jetpack = r39` on `1662541` (fork `main`'s TALOS_VERSION bump merged in), 2026-10-07: green. pkgs `6c312e4`, kernel 6.18.54, so the kernel stage and the shared images were built (no registry cache: the kernel took about 80 min). The 12 modules compiled and linked against 6.18.54 unchanged (`nvgpu.ko` 12 MB, signing key serial matches). Pushed: `nvidia-tegra-nvgpu:39.2.1-jp7-6.18.54-talos`, `kernel-modules-clang:1.3.0-6.18.54-talos`, base `custom-installer:v1.14.2-6.18.54`, installer `custom-installer:v1.14.2-6.18.54-nvgpu39.2.1-jp7` (digest `sha256:ef1745e7009236ef3d3b338c36fd2e90177872e16b314636dc599aa829db831c`). UKI 549 MB, USB image `talos-usb-nvgpu39.2.1-jp7.raw` 700 MB (artifact `talos-jetson-usb-feat-jetpack7-r39-r39`, 575 MB). The earlier 1.14.0 images (run 37064190229, and 37632420392 on `9fd3bb6`) stay in the registry. The firmware and userspace extensions are unchanged (`r39-v1`, `r39.2.1-v2`). Still build-time only.
+
 ## Flashing the board (Phase B notes, not run on hardware)
 
 Firmware and DTB come from Seeed's `Linux_for_Tegra` branch `r39.2.0` on the NVIDIA r39.2.0 BSP, config `recomputer-orin-j401` (standard J401, Orin NX 16 GB). To leave the NVMe alone, flash the QSPI only, as Seeed's CI does for its production images:
