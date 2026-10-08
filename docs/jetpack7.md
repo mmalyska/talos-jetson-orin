@@ -199,6 +199,21 @@ The r39 image booted on nv1 (QSPI r39.2.0, Talos v1.14.2 / 6.18.54). All modules
 
 After deleting the stale directory and letting the CDI pod recopy: `cuInit 0`, `cuDeviceGetCount 1`, no reset (with the three `nvidia-l4t-cuda` libraries supplied by hand). The nvgpu oops on wrong firmware is an nvgpu robustness bug, not something we patched.
 
+## nv1 result (2026-10-08): GPU works on r39
+
+Installer digest `sha256:5bcfbf2b...` (userspace extension `r39.2.1-v3`, Talos v1.14.2, kernel 6.18.54) on nv1 with QSPI r39.2.0: `cuInit` 0, one device, `llama-server` (LFM2.5-8B-A1B Q6_K_XL, CUDA 12.6 image `llama-cpp-jetson:v0.6.0`) 25.7 tok/s generation, 66 tok/s prompt processing, GPU load about 95% during a request; no kernel errors, the node stayed up. The CPU fallback for the same pod is about 6 tok/s.
+
+Things that cost time and are worth knowing:
+
+- **Same tag, new image: the node uses its cache.** `talosctl upgrade --image <tag>` reused the image it had already pulled (the log shows the old digest). Rebuilding the installer under an existing tag needs `--image ...@sha256:<digest>`, or better a new `NVGPU_VERSION`/tag.
+- **ESP space.** Each UKI is about 575 MB (the initramfs carries the kernel modules and extensions); a 2.0 GB ESP holds three at most, and the installer fails with `no space left on device` when it is full.
+- **Jetson UEFI keeps the old boot entry** (upstream Bug 25), so each same-version install needs the stale UKI renamed to `.bak`.
+- **A hard reset loses unsynced writes**: capture traces over the network (`strace -f -tt ... 2>&1` through `kubectl exec` redirected on the client side, `talosctl dmesg --follow`), not into a file on the node.
+- **`--qspi-only` for the QSPI flash**: without it `l4t_initrd_flash.sh ... external` also generates and flashes GPT, ESP and rootfs images for `nvme0n1p1`.
+- The r36 modules and libraries also ran on the r39 firmware and device tree (only the media engines print `failed to register host1x actmon: -19`).
+
+Open: soak test (hours of load, watch for nvgpu faults and memory), `libnvsciipc` works without `/dev/nvsciipc` (cuInit and inference fine), CUDA 13 images not tried, the syncpoint patch was not needed.
+
 ## Flashing the board (Phase B notes, not run on hardware)
 
 Firmware and DTB come from Seeed's `Linux_for_Tegra` branch `r39.2.0` on the NVIDIA r39.2.0 BSP, config `recomputer-orin-j401` (standard J401, Orin NX 16 GB). To leave the NVMe alone, flash the QSPI only, as Seeed's CI does for its production images:
