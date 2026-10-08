@@ -67,7 +67,7 @@ case "${JETPACK}" in
     : "${FIRMWARE_EXT_TAG:=r39-v1}"
     # libcuda and its runtime libraries as a system extension (scripts/build-r39-userspace.sh);
     # r36 downloads them on the node instead, so its tag stays empty and no extension is added
-    : "${USERSPACE_EXT_TAG:=r39.2.1-v2}"
+    : "${USERSPACE_EXT_TAG:=r39.2.1-v3}"
     ;;
   *) echo "[ERROR] JETPACK must be r36 or r39, got '${JETPACK}'" >&2; exit 1 ;;
 esac

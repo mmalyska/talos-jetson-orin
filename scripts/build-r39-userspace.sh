@@ -4,7 +4,7 @@
 #
 #   nvidia-firmware-ext:<FIRMWARE_EXT_TAG>      GA10B firmware (package nvidia-l4t-firmware)
 #   nvidia-tegra-userspace:<USERSPACE_EXT_TAG>  libcuda and the NVIDIA runtime libraries it
-#                                               needs (packages nvidia-l4t-cuda-nvgpu, -core)
+#                                               needs (packages nvidia-l4t-cuda-nvgpu, -cuda, -core)
 #
 # Why a build step and not a download on the node, as r36 did: the r39 core GPU packages are
 # not in NVIDIA's apt repository any more, only in the BSP tarball (1.3 GB). So CI extracts the
@@ -47,11 +47,13 @@ GOT=$(sha256sum "${BSP_FILE}" | cut -d' ' -f1)
 info "BSP checksum OK ($(du -hL "${BSP_FILE}" | cut -f1))"
 
 # ── 2. the three debs ────────────────────────────────────────────────────────
-PKGS=(nvidia-l4t-core nvidia-l4t-cuda-nvgpu nvidia-l4t-firmware)
-if ! ls "${DEBS_DIR}"/nvidia-l4t-core_*_arm64.deb >/dev/null 2>&1; then
-  info "Extracting ${PKGS[*]} from the BSP (bzip2 stream, a few minutes)"
+PKGS=(nvidia-l4t-core nvidia-l4t-cuda-nvgpu nvidia-l4t-cuda nvidia-l4t-firmware)
+MISSING=()
+for p in "${PKGS[@]}"; do ls "${DEBS_DIR}/${p}_"*_arm64.deb >/dev/null 2>&1 || MISSING+=("${p}"); done
+if ((${#MISSING[@]})); then
+  info "Extracting ${MISSING[*]} from the BSP (bzip2 stream, a few minutes)"
   WILD=()
-  for p in "${PKGS[@]}"; do WILD+=(--wildcards "*/nv_tegra/l4t_deb_packages/${p}_*_arm64.deb"); done
+  for p in "${MISSING[@]}"; do WILD+=(--wildcards "*/nv_tegra/l4t_deb_packages/${p}_*_arm64.deb"); done
   tar -xjf "${BSP_FILE}" -C "${DEBS_DIR}" --strip-components=3 "${WILD[@]}"
 fi
 for p in "${PKGS[@]}"; do
@@ -66,7 +68,8 @@ done
 LIB_OUT="${OUT}/userspace/rootfs/usr/local/lib/nvidia-tegra"
 mkdir -p "${LIB_OUT}"
 LIBDIRS=("${X}/nvidia-l4t-cuda-nvgpu/opt/nvidia/l4t-gpu-libs/nvgpu"
-         "${X}/nvidia-l4t-core/usr/lib/aarch64-linux-gnu/nvidia")
+         "${X}/nvidia-l4t-core/usr/lib/aarch64-linux-gnu/nvidia"
+         "${X}/nvidia-l4t-cuda/usr/lib/aarch64-linux-gnu/nvidia")
 
 is_system_lib() {
   case "$1" in
@@ -90,7 +93,10 @@ copy_lib() { # copy_lib <path> <destdir>
 }
 
 declare -A SEEN=()
-QUEUE=(libcuda.so.1)
+# libcuda.so.1 plus the two libraries it dlopen()s at cuInit (not in its ELF NEEDED list):
+# libnvcucompat.so (cuInit returns 999 without it, seen with strace on nv1) and libnvcuextend.so.
+# Both are in the nvidia-l4t-cuda deb.
+QUEUE=(libcuda.so.1 libnvcucompat.so libnvcuextend.so)
 while ((${#QUEUE[@]})); do
   NAME="${QUEUE[0]}"; QUEUE=("${QUEUE[@]:1}")
   [[ -n "${SEEN[${NAME}]:-}" ]] && continue
@@ -116,6 +122,9 @@ done
 CUDA_SIZE=$(stat -c %s "${LIB_OUT}/libcuda.so.1.1" 2>/dev/null || echo 0)
 (( CUDA_SIZE > 50000000 )) || { warn "libcuda.so.1.1 is only ${CUDA_SIZE} bytes"; FAIL=1; }
 [[ -L "${LIB_OUT}/libcuda.so.1" ]] || { warn "libcuda.so.1 symlink missing"; FAIL=1; }
+for dl in libnvcucompat.so libnvcuextend.so; do
+  [[ -e "${LIB_OUT}/${dl}" ]] || { warn "${dl} (dlopen()ed by libcuda at cuInit) missing"; FAIL=1; }
+done
 (( FAIL == 0 )) || error "userspace library verification failed"
 info "userspace: $(find "${LIB_OUT}" -maxdepth 1 \( -type f -o -type l \) | wc -l) entries, $(du -sh "${LIB_OUT}" | cut -f1), libcuda.so.1.1 ${CUDA_SIZE} bytes"
 ls -l "${LIB_OUT}" | sed 's/^/    /'
