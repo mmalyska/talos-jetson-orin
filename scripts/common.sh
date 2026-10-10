@@ -64,10 +64,8 @@ case "${JETPACK}" in
   r39)
     NVGPU_PKG="nvidia-tegra-nvgpu-r39"
     : "${NVGPU_VERSION:=39.2.1-jp7}"
-    : "${FIRMWARE_EXT_TAG:=r39-v1}"
-    # libcuda and its runtime libraries as a system extension (scripts/build-r39-userspace.sh);
-    # r36 downloads them on the node instead, so its tag stays empty and no extension is added
-    : "${USERSPACE_EXT_TAG:=r39.2.1-v3}"
+    : "${FIRMWARE_EXT_TAG:=r39-v1}"   # scripts/build-r39-firmware.sh; the userspace libraries are
+                                      # downloaded on the node by manifests/gpu/cdi-setup-r39.yaml
     ;;
   *) echo "[ERROR] JETPACK must be r36 or r39, got '${JETPACK}'" >&2; exit 1 ;;
 esac
@@ -82,7 +80,6 @@ IMG_INSTALLER="${REGISTRY}/custom-installer:${TALOS_VERSION}-${KERNEL_VERSION}-n
 IMG_KERNEL_MODULES="${REGISTRY}/kernel-modules-clang:${KERNEL_MODULES_VERSION}-${KERNEL_VERSION}-talos"
 IMG_NVGPU="${REGISTRY}/nvidia-tegra-nvgpu:${NVGPU_VERSION}-${KERNEL_VERSION}-talos"
 IMG_FIRMWARE="${REGISTRY}/nvidia-firmware-ext:${FIRMWARE_EXT_TAG}"
-IMG_USERSPACE="${REGISTRY}/nvidia-tegra-userspace:${USERSPACE_EXT_TAG:-none}"
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

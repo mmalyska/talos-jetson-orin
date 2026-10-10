@@ -149,12 +149,12 @@ jobs:
           # kernel compile (~40 min) is a cache hit → build drops to ~15–20 min.
           CACHE_REGISTRY: ghcr.io/${{ github.repository_owner }}/build-cache
 
-      - name: Build + push the r39 firmware and userspace extensions to ghcr.io
-        # JetPack r39 only. The GA10B firmware and libcuda with its runtime libraries come from
-        # the Jetson Linux BSP tarball (the r39 packages are not in NVIDIA's apt), assembled by
-        # scripts/build-r39-userspace.sh into nvidia-firmware-ext:<r39 tag> and
-        # nvidia-tegra-userspace:<tag>. Independent of the kernel build; skipped when both tags
-        # are already in ghcr.io.
+      - name: Build + push the r39 firmware extension to ghcr.io
+        # JetPack r39 only. The GA10B firmware comes from the nvidia-l4t-firmware deb in NVIDIA's
+        # apt repository (component "som" of r39.2), packaged by scripts/build-r39-firmware.sh
+        # into nvidia-firmware-ext:<r39 tag>. The userspace libraries are downloaded on the node
+        # by manifests/gpu/cdi-setup-r39.yaml. Independent of the kernel build; skipped when the
+        # tag is already in ghcr.io.
         if: env.JETPACK == 'r39'
         env:
           REGISTRY_DOCKER: ghcr.io/${{ github.repository_owner }}
@@ -162,20 +162,19 @@ jobs:
         run: |
           source scripts/common.sh
           FW="${REGISTRY_DOCKER}/nvidia-firmware-ext:${FIRMWARE_EXT_TAG}"
-          US="${REGISTRY_DOCKER}/nvidia-tegra-userspace:${USERSPACE_EXT_TAG}"
-          if docker manifest inspect "${FW}" >/dev/null 2>&1 && docker manifest inspect "${US}" >/dev/null 2>&1; then
-            echo "✓ ${FW} and ${US} already in ghcr.io — skipping"
+          if docker manifest inspect "${FW}" >/dev/null 2>&1; then
+            echo "✓ ${FW} already in ghcr.io — skipping"
             exit 0
           fi
-          scripts/build-r39-userspace.sh
+          scripts/build-r39-firmware.sh
         timeout-minutes: 30
 
       - name: Build + push nvidia-firmware-ext to ghcr.io
         # Independent of the kernel build — only runs when the tag is not yet in ghcr.io.
         # Sources GA10B firmware from the NVIDIA L4T r36 (JetPack 6.2) apt repository.
-        # JetPack r39: the firmware comes from the r39 BSP, not from this apt repository (no t234
-        # component any more); that extension is built by a separate step (task A8), so this
-        # step must not publish r36 firmware under the r39 tag.
+        # JetPack r39: the firmware comes from the "som" component (previous step), not from this
+        # apt repository (no t234 component any more), so this step must not publish r36
+        # firmware under the r39 tag.
         if: steps.check_cache.outputs.skip_fw != 'true' && env.JETPACK != 'r39'
         env:
           REGISTRY_DOCKER: ghcr.io/${{ github.repository_owner }}
