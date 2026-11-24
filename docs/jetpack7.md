@@ -110,6 +110,8 @@ download, 32 MB kept). Three things that are easy to miss:
   the power-mode cap (918 MHz in MAXN) as soon as it appears, so the GPU does not run above it. The cap used to come
   from the 60-second re-assert loop, which left up to a minute without it after the first GPU use. The log line is
   `GPU devfreq appeared, capped at ... Hz`.
+  The 918 MHz cap is the J401 (Orin NX 16 GB) MAXN value and the manifest has no per-board profile: on an AGX
+  Orin it would cap the GPU at 918 MHz too (an AGX devkit ran at 1300 MHz in MAXN), so adjust it there.
 
 `scripts/check-r39-userspace.sh` (workflow "Check r39 userspace", weekly and on changes) runs the manifest's own
 download script and verifies the checksums and the library closure; `scripts/build-r39-firmware.sh` builds the
@@ -135,7 +137,8 @@ overlay list. The flash host needs an x86-64 Ubuntu 22.04/24.04 (it serves NFS t
 `l4t_initrd_flash.sh` came up without the NVMe: UEFI tried HTTP boot and dropped to the UEFI shell. After a full
 power cycle (recovery jumper and USB cable removed, then power off and on) the NVMe booted directly, with no boot
 entry set by hand. If the board lands in the UEFI shell after the flash, power-cycle it before looking at the boot
-entries.
+entries. On a Jetson AGX Orin 64 GB devkit (P3701-0005) the warm reboot at the end of the flash booted the NVMe
+normally, so this seems specific to the J401 or to that flash.
 
 r36 modules also loaded on the r39 firmware and device tree in a test (the media engines log `failed to
 register host1x actmon`), so flashing does not immediately break an r36 image, but do not rely on it. In one
